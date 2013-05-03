@@ -1,0 +1,183 @@
+#Operating Systems Assignment-Simulation of Virtual Memory
+#Team Members:
+#S.Sunad Bhandary   usn-1PI10CS073
+#Rohith.P           usn-1PI10CS071
+#Rahul Velayuthm    usn-1PI10CS065
+#Randeep            usn-1PI10CS067
+#5th sem A section
+
+
+from time import sleep
+from collections import deque
+
+binary={'0':'0000','1':'0001','2':'0010','3':'0011','4':'0100','5':'0101','6':'0110','7':'0111','8':'1000','9':'1001','A':'1010','B':'1011','C':'1100','D':'1101','E':'1110','F':'1111'}
+pt={}                       #pagetable
+frame_table={}              #frametable
+frame_order=deque([])       #order of assigning frames
+frames=[]                   #pids present in frames
+
+def init(n,m):
+    for i in range(0,n):
+        pt[i]=[]
+        for j in range(64):
+            pt[i].append(['','',''])      #adding 64 pages to page table of each process
+    for i in range(0,m):
+        frame_table[i]=''                 #initialisng the frame table
+    for i in range(0,m):
+        frames.append('')                 #for printing the frames
+
+def assignframe(pid,page):
+    for i in frame_table.keys():            #loading page into frames
+        if frame_table[i]=='':
+            print "Loading proc:",pid,"page:",page,"into frame:",i
+            sleep(1)
+            frame_table[i]=[pid,page]           
+            frame_order.append([pid,page,i])    #order of loading
+            return i
+    else: return -1                             #real memory full
+
+def setentry(pid,page,frame):
+    pt[pid][page][2]=str(frame)             #updating the page in pagetable
+    pt[pid][page][0]='1' 
+	
+def translate(pid,page,offset,mode):
+    if pt[pid][page][2]=='':            #checking if page is present
+        print "page fault"
+        frame=assignframe(pid,page)     #if not present,loading 
+        if frame !=-1:                  #loaded succesfully
+            f=frame
+            setentry(pid,page,frame)
+            useentry(pid,page,mode)
+            off=offset
+            frame=bin(int(pt[pid][page][2],32))
+            while len(off)<10:
+                off="0"+off      #10-bits
+            while len(frame)<6:
+                frame="0"+frame  #6-bits
+            s=frame+off
+            a=''
+            for i in s: 
+                if i!='b':
+                    a+=i    
+            print "The physical address:",a
+            frames[f]=frame_table[f][0]    #process in frames
+
+        elif frame==-1:   
+            useentry(pid,page,mode)
+            replaced=bin(swap(pid,page)) #memory full
+            setentry(pid,page,replaced)
+            off=offset
+            while len(off)<10:
+                off="0"+off
+            while len(replaced)<6:
+                replaced="0"+replaced
+            s=replaced+off
+            a=''
+            for i in s:
+                if i!='b':
+                    a+=i        
+            print "The physical address:",a
+			
+    else:  #page already present
+        off=offset
+        frame=bin(int(pt[pid][page][2],16))
+        while len(off)<10:
+            off="0"+off
+        while len(frame)<6:
+            frame="0"+frame
+        s=frame+off
+        a=''    
+        for i in s:
+            if i!='b':
+                a+=i    
+        print "The page:",page,"of proess:",pid,"is already present in the page table."
+        useentry(pid,page,mode)
+        print "The physical address:",a
+		
+   
+def swap(pid,page):#replacement-first in first out
+    temp=frame_order.popleft() #process to be swapped
+    swapped_out_page=temp[1]
+    swapped_out_process=temp[0]
+    if pt[swapped_out_process][swapped_out_page][1]=='1':       #if swapped out process is in write mode
+        print "writing back page to be swapped to hard disk"
+        sleep(2)
+    print "Swapping out Page: ",swapped_out_page," of Process: ",swapped_out_process
+    sleep(1)
+    frame_table[temp[2]][0] = pid   #updating frametable
+    frame_table[temp[2]][1] = page
+    print "Loading Page ",page," Of process ",pid," Into Frame ",temp[2]
+    sleep(1)
+    frame_order.append([pid,page,temp[2]]) #order of loading
+    frames[temp[2]]=frame_table[temp[2]][0] #process in frames
+    return temp[2]
+	
+
+def useentry(pid,page,mode):    #setting access types
+    if mode=='W':
+        pt[pid][page][1]='1'
+        print "access type:",pt[pid][page][1]
+    elif mode=='R':
+        pt[pid][page][1]='0'
+        print "acces type:",pt[pid][page][1]
+    else:
+        print "Invalid mode---It should be either R or W"
+
+
+def mem_management(no_process,realmem,input_list):
+    for i in range(len(input_list)):
+        pid=int(input_list[i][0])     #pid
+        mode=input_list[i][1]          #mode
+        print input_list[i]
+        add=''
+        adress=input_list[i][2] #virtual adress
+        for i in adress:
+            if i in binary.keys():
+                add+=binary[i]
+        page=int(add[0:6],2) #6-bit page no
+        offset=add[6:15]     #10-bit offset
+        trans=translate(pid,page,offset,mode)
+        print "proess in frames are"
+        for j in frames:
+            if j!='':
+                print "|",j,"|",
+            else: print "| - |",
+        print "\n"
+        print "--"*30
+	
+def schedule(input_list):   #scheduling the process
+    length=len(input_list)
+    inl=[]
+    while len(inl)<length:
+        il={}
+        i=0
+        while i<len(input_list):
+            if input_list[i][0] not in il.keys() :
+                il[input_list[i][0]]=input_list[i]
+                input_list.pop(i)
+                
+            else : i=i+1
+        for k in il.keys():
+            inl.append(il[k])
+            
+    return inl                
+            
+
+if __name__ == '__main__':    #main
+
+    file=open("input.txt","r") 
+    realmem=input("enter the size of real memory(4K-16K)\n")
+    input_list=[]
+    for i in file:
+        j=i.replace("\n","").replace(" ","")
+        k=j.split(",")
+        input_list.append(k)
+    input_list=schedule(input_list)#scheduling the order of execution
+    no_process=int(max(input_list)[0])+1
+    init(no_process,realmem)    #initialising the reqd global structure
+    print "--"*30
+    mem_management(no_process,realmem,input_list)   
+    print "terminating main"
+
+	
+
